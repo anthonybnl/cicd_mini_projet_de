@@ -1,8 +1,10 @@
 import csv
 import json
+import re
 import sys
 from pathlib import Path
 
+import boto3
 from sqlalchemy import text
 
 from db import get_database_engine
@@ -15,6 +17,7 @@ def extraire_data(file_path) -> list[dict]:
         reader = csv.DictReader(csvfile)
         data = list(reader)
     return data
+
 
 def _mon_group_by(data: list[dict], key: str) -> dict:
     grouped = {}
@@ -136,8 +139,8 @@ def inserer_data(
     inserer_montants_par_iban_destination(engine, results_montants_par_iban_destination)
     inserer_transactions_cinq_mille(engine, transactions_cinq_mille)
 
-def traiter_fichier(file_path):
-    data = extraire_data(file_path)
+
+def traiter_lot_donnee(data: list[dict]):
     (
         results_montants_par_iban,
         results_montants_par_banque,
@@ -172,25 +175,54 @@ def traiter_fichier(file_path):
         transactions_cinq_mille,
     )
 
-def main():
-    # liste des fichiers à traiter
-    DATA_PATH = Path(__file__).parents[1]
-    list_fichier_csv: list[Path] = list(DATA_PATH.glob("*.csv"))
 
-    list_fichier_csv = sorted(list_fichier_csv)
+def telecharger_fichiers_s3(s3, bucket: str) -> list[Path]:
+    objects = s3.list_objects_v2(Bucket=bucket)
+    liste_fichiers = [obj["Key"] for obj in objects.get("Contents", [])]
+
+    liste_fichiers_locaux: list[Path] = []
+
+    for fichier in liste_fichiers:
+        # on extrait le nom du fichier si on a le pattern data/<fichier>.csv, en regex. Pas de sous dossier !
+        match = re.match(r"data/([a-zA-Z0-9_]+\.csv)", fichier)
+        if match:
+            nom_fichier = match.group(1)
+            s3.download_file(bucket, fichier, nom_fichier)
+            liste_fichiers_locaux.append(Path(nom_fichier).resolve())
+    return liste_fichiers_locaux
+
+
+def main():
+
+    # client boto3
+    s3 = boto3.client(
+        "s3",
+        endpoint_url="http://localhost:9001",
+        aws_access_key_id="rustfs",
+        aws_secret_access_key="rustfs",
+    )
+    bucket = "bucketminiprojet"
+
+    if not any(b["Name"] == bucket for b in s3.list_buckets()["Buckets"]):
+        raise RuntimeError(f"Le bucket '{bucket}' n'existe pas.")
+
+    liste_fichiers = telecharger_fichiers_s3(s3, bucket)
+    print("Fichiers téléchargés :", liste_fichiers)
+
+    liste_fichiers_csv = sorted(liste_fichiers)
 
     # gestion du retry : on mémorise les fichiers traités
     MEMORY_FILEPATH = Path("fichiers_traite.json").resolve()
 
     fichiers_traite = []
-
     has_error = False
+    all_data = []
 
     if MEMORY_FILEPATH.exists():
         with open(MEMORY_FILEPATH, "r") as f:
             fichiers_traite = json.load(f)
-    
-    for fichier_csv in list_fichier_csv:
+
+    for fichier_csv in liste_fichiers_csv:
         if str(fichier_csv) in fichiers_traite:
             print(f"Le fichier {fichier_csv} a déjà été traité. Passage au suivant.")
             continue
@@ -198,24 +230,34 @@ def main():
         # on traite le fichier
         try:
             print(f"Traitement du fichier : {fichier_csv} ...")
-            traiter_fichier(fichier_csv)
+            data = extraire_data(fichier_csv)
+            all_data += data
 
             # on enregistre le fichier traité dans la liste et le fichier JSON
             fichiers_traite.append(str(fichier_csv))
             with open(MEMORY_FILEPATH, "w") as f:
                 json.dump(fichiers_traite, f)
         except Exception as e:  # noqa: BLE001
-            print(f"Erreur lors du traitement du fichier {fichier_csv} : {type(e).__name__} {e}")
+            print(
+                f"Erreur lors du traitement du fichier {fichier_csv} : {type(e).__name__} {e}"
+            )
             has_error = True
-    
+
+        # suppression du fichier local après traitement
+        Path(fichier_csv).unlink()
+
+    if len(all_data) > 0:
+        traiter_lot_donnee(all_data)
+
     if has_error:
-        print("Certains fichiers n'ont pas pu être traités.\nLe fichier mémoire est conservé pour le retry")
+        print(
+            "Certains fichiers n'ont pas pu être traités.\nLe fichier mémoire est conservé pour le retry"
+        )
         sys.exit(1)
     else:
         print("Tous les fichiers ont été traités avec succès.")
         if MEMORY_FILEPATH.exists():
             MEMORY_FILEPATH.unlink()  # on supprime le fichier mémoire car tous les fichiers ont été traités avec succès
-        
 
 
 if __name__ == "__main__":

@@ -1,5 +1,6 @@
 import csv
 from pathlib import Path
+
 import boto3
 
 fichier1 = [
@@ -97,12 +98,12 @@ fichier1 = [
 
 fichier2 = [
     {
-        "datetime": "2026-09-11T08:54:00",
-        "iban_source": "DE89370400440532013000",
+        "datetime": "2026-07-06T00:00:00",
+        "iban_source": "ES9121000418450200051332",
         "pays_source": "France",
-        "banque": "Crédit agricole",
-        "iban_destination": "DE89370400440532013000",
-        "pays_destination": "Germany",
+        "banque": "Caisse d'épargne",
+        "iban_destination": "FR7630006000011234567890189",
+        "pays_destination": "France",
         "montant": 82.56,
     }
 ]
@@ -149,6 +150,8 @@ def main():
 
     envoyer_fichier_dans_bucket(s3, bucket, Path("data1.csv").resolve(), fichier1)
     envoyer_fichier_dans_bucket(s3, bucket, Path("data2.csv").resolve(), fichier2)
+
+    print("Fichiers envoyés dans le bucket avec succès.")
 
 
 if __name__ == "__main__":

@@ -83,11 +83,12 @@ def data_expected():
     # ces données sont triées par IBAN, banque et datetime_tx pour que cela corresponde aux données de la BDD
     montants_par_iban = [
         MontantParIban(iban="DE89370400440532013000", montant=112.24),
-        MontantParIban(iban="ES9121000418450200051332", montant=4.5),
+        MontantParIban(iban="ES9121000418450200051332", montant=87.06),
         MontantParIban(iban="FR7630006000011234567890189", montant=12747.99),
     ]
 
     montants_par_banque = [
+        MontantParBanque(banque="Caisse d'épargne", montant=82.56),
         MontantParBanque(banque="Crédit agricole", montant=5297.99),
         MontantParBanque(banque="Deutsche Bank", montant=96.74),
         MontantParBanque(banque="Société Générale", montant=7470.0),
@@ -96,7 +97,7 @@ def data_expected():
     montants_par_iban_destination = [
         MontantParIbanDestination(iban="DE89370400440532013000", montant=5235.0),
         MontantParIbanDestination(iban="ES9121000418450200051332", montant=7546.24),
-        MontantParIbanDestination(iban="FR7630006000011234567890189", montant=83.49),
+        MontantParIbanDestination(iban="FR7630006000011234567890189", montant=166.05),
     ]
 
     transactions_montant_eleve = [
