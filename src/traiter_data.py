@@ -2,6 +2,7 @@ import csv
 import json
 import re
 import sys
+import time
 from pathlib import Path
 
 import boto3
@@ -175,22 +176,39 @@ def traiter_lot_donnee(data: list[dict]):
         transactions_cinq_mille,
     )
 
-
-def telecharger_fichiers_s3(s3, bucket: str) -> list[Path]:
+def lister_fichiers_s3(s3, bucket: str) -> list[str]:
+    # pour tester le retry
+    # return ["data/data1.csv", "data/data3.csv"]
+    
     objects = s3.list_objects_v2(Bucket=bucket)
     liste_fichiers = [obj["Key"] for obj in objects.get("Contents", [])]
+    return liste_fichiers
 
-    liste_fichiers_locaux: list[Path] = []
 
-    for fichier in liste_fichiers:
-        # on extrait le nom du fichier si on a le pattern data/<fichier>.csv, en regex. Pas de sous dossier !
-        match = re.match(r"data/([a-zA-Z0-9_]+\.csv)", fichier)
-        if match:
-            nom_fichier = match.group(1)
-            s3.download_file(bucket, fichier, nom_fichier)
-            liste_fichiers_locaux.append(Path(nom_fichier).resolve())
-    return liste_fichiers_locaux
+def telecharger_un_fichier_s3(s3, bucket: str, key: str) -> Path:
+    match = re.match(r"data/([a-zA-Z0-9_]+\.csv)", key)
+    if not match:
+        print(f"Le key '{key}' ne correspond pas au pattern attendu 'data/<fichier>.csv'")
+    else:
+        nom_fichier = match.group(1)
+        local_file = Path(nom_fichier)
+        print(f"Téléchargement du fichier {key} vers {local_file} ...")
 
+        # téléchargement avec retry
+        max_retry = 3
+        for attempt in range(max_retry):
+            try:
+                s3.download_file(bucket, key, local_file)
+                break
+            except Exception as e:
+                print(f"Erreur lors du téléchargement du fichier {key} (tentative {attempt + 1}) : {type(e).__name__} {e}")
+                if attempt == max_retry - 1:
+                    raise
+                else:
+                    print("Nouvelle tentative dans 5 seconde...")
+                    time.sleep(5)
+
+        return local_file
 
 def main():
 
@@ -206,10 +224,8 @@ def main():
     if not any(b["Name"] == bucket for b in s3.list_buckets()["Buckets"]):
         raise RuntimeError(f"Le bucket '{bucket}' n'existe pas.")
 
-    liste_fichiers = telecharger_fichiers_s3(s3, bucket)
-    print("Fichiers téléchargés :", liste_fichiers)
-
-    liste_fichiers_csv = sorted(liste_fichiers)
+    liste_fichiers_s3 = sorted(lister_fichiers_s3(s3, bucket))
+    print("Liste des fichiers S3 :", liste_fichiers_s3)
 
     # gestion du retry : on mémorise les fichiers traités
     MEMORY_FILEPATH = Path("fichiers_traite.json").resolve()
@@ -222,31 +238,32 @@ def main():
         with open(MEMORY_FILEPATH, "r") as f:
             fichiers_traite = json.load(f)
 
-    for fichier_csv in liste_fichiers_csv:
-        if str(fichier_csv) in fichiers_traite:
-            print(f"Le fichier {fichier_csv} a déjà été traité. Passage au suivant.")
-            continue
+    for key_s3 in liste_fichiers_s3:
 
+        if str(key_s3) in fichiers_traite:
+            print(f"Le fichier dans le bucket {key_s3} a déjà été traité. Passage au suivant.")
+            continue
         # on traite le fichier
         try:
-            print(f"Traitement du fichier : {fichier_csv} ...")
+            print(f"Traitement du fichier : {key_s3} ...")
+            fichier_csv = telecharger_un_fichier_s3(s3, bucket, key_s3)
             data = extraire_data(fichier_csv)
+            # suppression du fichier local après traitement
+            Path(fichier_csv).unlink()
             all_data += data
 
             # on enregistre le fichier traité dans la liste et le fichier JSON
-            fichiers_traite.append(str(fichier_csv))
+            fichiers_traite.append(str(key_s3))
             with open(MEMORY_FILEPATH, "w") as f:
                 json.dump(fichiers_traite, f)
         except Exception as e:  # noqa: BLE001
             print(
-                f"Erreur lors du traitement du fichier {fichier_csv} : {type(e).__name__} {e}"
+                f"Erreur lors du traitement du fichier {key_s3} : {type(e).__name__} {e}"
             )
             has_error = True
 
-        # suppression du fichier local après traitement
-        Path(fichier_csv).unlink()
-
     if len(all_data) > 0:
+        print("Calcul des agrégats ...")
         traiter_lot_donnee(all_data)
 
     if has_error:
