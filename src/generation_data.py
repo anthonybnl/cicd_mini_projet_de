@@ -6,7 +6,7 @@ all_data = [
         "banque": "Crédit agricole",
         "iban_destination": "DE89370400440532013000",
         "pays_destination": "Germany",
-        "montant": 32
+        "montant": 32,
     },
     {
         "datetime": "2026-06-17T23:13:00",
@@ -15,7 +15,7 @@ all_data = [
         "banque": "Société Générale",
         "iban_destination": "ES9121000418450200051332",
         "pays_destination": "Spain",
-        "montant": 7459
+        "montant": 7459,
     },
     {
         "datetime": "2026-06-17T23:13:00",
@@ -24,7 +24,7 @@ all_data = [
         "banque": "Société Générale",
         "iban_destination": "ES9121000418450200051332",
         "pays_destination": "United Kingdom",
-        "montant": 7
+        "montant": 7,
     },
     {
         "datetime": "2026-06-17T23:13:00",
@@ -33,7 +33,7 @@ all_data = [
         "banque": "Deutsche Bank",
         "iban_destination": "ES9121000418450200051332",
         "pays_destination": "Germany",
-        "montant": 24.24
+        "montant": 24.24,
     },
     {
         "datetime": "2026-01-08T14:20:00",
@@ -42,7 +42,7 @@ all_data = [
         "banque": "Deutsche Bank",
         "iban_destination": "FR7630006000011234567890189",
         "pays_destination": "United Kingdom",
-        "montant": 72
+        "montant": 72,
     },
     {
         "datetime": "2026-01-08T14:20:00",
@@ -51,7 +51,7 @@ all_data = [
         "banque": "Crédit agricole",
         "iban_destination": "DE89370400440532013000",
         "pays_destination": "Spain",
-        "montant": 5199
+        "montant": 5199,
     },
     {
         "datetime": "2026-09-11T08:54:00",
@@ -60,7 +60,7 @@ all_data = [
         "banque": "Deutsche Bank",
         "iban_destination": "FR7630006000011234567890189",
         "pays_destination": "United Kingdom",
-        "montant": 0.5
+        "montant": 0.5,
     },
     {
         "datetime": "2026-09-11T08:54:00",
@@ -69,7 +69,7 @@ all_data = [
         "banque": "Crédit agricole",
         "iban_destination": "ES9121000418450200051332",
         "pays_destination": "France",
-        "montant": 56
+        "montant": 56,
     },
     {
         "datetime": "2026-09-11T08:54:00",
@@ -78,7 +78,7 @@ all_data = [
         "banque": "Société Générale",
         "iban_destination": "DE89370400440532013000",
         "pays_destination": "Germany",
-        "montant": 4
+        "montant": 4,
     },
     {
         "datetime": "2026-09-11T08:54:00",
@@ -87,7 +87,7 @@ all_data = [
         "banque": "Crédit agricole",
         "iban_destination": "FR7630006000011234567890189",
         "pays_destination": "Germany",
-        "montant": 10.99
+        "montant": 10.99,
     },
 ]
 
@@ -96,7 +96,15 @@ all_data = [
 import csv
 
 with open("data.csv", "w", newline="") as csvfile:
-    fieldnames = ["datetime", "iban_source", "pays_source", "banque", "iban_destination", "pays_destination", "montant"]
+    fieldnames = [
+        "datetime",
+        "iban_source",
+        "pays_source",
+        "banque",
+        "iban_destination",
+        "pays_destination",
+        "montant",
+    ]
     writer = csv.DictWriter(csvfile, fieldnames=fieldnames, lineterminator="\n")
 
     writer.writeheader()

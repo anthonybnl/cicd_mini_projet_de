@@ -1,5 +1,8 @@
 import csv
-import json
+
+from sqlalchemy import text
+
+from db import get_database_engine
 
 
 def extraire_data() -> list[dict]:
@@ -57,7 +60,81 @@ def traiter_data(data: list[dict]):
         transactions_cinq_mille,
     )
 
-    # transactions >= 5000
+
+def inserer_montants_par_iban(engine, results_montants_par_iban):
+    with engine.begin() as conn:
+        for iban, total in results_montants_par_iban:
+            conn.execute(
+                text(
+                    "INSERT INTO montants_par_iban (iban, montant) VALUES (:iban, :total) "
+                    "ON CONFLICT (iban) DO UPDATE SET montant = EXCLUDED.montant"
+                ),
+                {"iban": iban, "total": total},
+            )
+        conn.commit()
+
+
+def inserer_montants_par_banque(engine, results_montants_par_banque):
+    with engine.begin() as conn:
+        for banque, total in results_montants_par_banque:
+            conn.execute(
+                text(
+                    "INSERT INTO montants_par_banque (banque, montant) VALUES (:banque, :total) "
+                    "ON CONFLICT (banque) DO UPDATE SET montant = EXCLUDED.montant"
+                ),
+                {"banque": banque, "total": total},
+            )
+        conn.commit()
+
+
+def inserer_montants_par_iban_destination(
+    engine, results_montants_par_iban_destination
+):
+    with engine.begin() as conn:
+        for iban, total in results_montants_par_iban_destination:
+            conn.execute(
+                text(
+                    "INSERT INTO montants_par_iban_destination (iban, montant) VALUES (:iban, :total) "
+                    "ON CONFLICT (iban) DO UPDATE SET montant = EXCLUDED.montant"
+                ),
+                {"iban": iban, "total": total},
+            )
+        conn.commit()
+
+
+def inserer_transactions_cinq_mille(engine, transactions_cinq_mille):
+    with engine.begin() as conn:
+        for row in transactions_cinq_mille:
+            conn.execute(
+                text(
+                    "INSERT INTO transactions_montant_eleve (datetime_tx, montant, iban_source, pays_source, iban_destination, pays_destination, banque) "
+                    "VALUES (:datetime, :montant, :iban_source, :pays_source, :iban_destination, :pays_destination, :banque) "
+                    "ON CONFLICT (datetime_tx, iban_source, iban_destination) DO NOTHING"
+                ),
+                {
+                    "datetime": row["datetime"],
+                    "montant": row["montant"],
+                    "iban_source": row["iban_source"],
+                    "pays_source": row["pays_source"],
+                    "iban_destination": row["iban_destination"],
+                    "pays_destination": row["pays_destination"],
+                    "banque": row["banque"],
+                },
+            )
+        conn.commit()
+
+
+def inserer_data(
+    engine,
+    results_montants_par_iban,
+    results_montants_par_banque,
+    results_montants_par_iban_destination,
+    transactions_cinq_mille,
+):
+    inserer_montants_par_iban(engine, results_montants_par_iban)
+    inserer_montants_par_banque(engine, results_montants_par_banque)
+    inserer_montants_par_iban_destination(engine, results_montants_par_iban_destination)
+    inserer_transactions_cinq_mille(engine, transactions_cinq_mille)
 
 
 def main():
@@ -83,8 +160,18 @@ def main():
 
     print("\nTransactions >= 5000:")
     for row in transactions_cinq_mille:
-        print(f"date: {row['datetime']}, montant: {row['montant']}, iban_source: {row['iban_source']}, iban_destination: {row['iban_destination']}, banque: {row['banque']}")
+        print(
+            f"date: {row['datetime']}, montant: {row['montant']}, iban_source: {row['iban_source']}, iban_destination: {row['iban_destination']}, banque: {row['banque']}"
+        )
 
+    engine = get_database_engine()
+    inserer_data(
+        engine,
+        results_montants_par_iban,
+        results_montants_par_banque,
+        results_montants_par_iban_destination,
+        transactions_cinq_mille,
+    )
 
 
 if __name__ == "__main__":
