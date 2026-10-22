@@ -1,4 +1,6 @@
 import csv
+from pathlib import Path
+import boto3
 
 fichier1 = [
     {
@@ -101,12 +103,13 @@ fichier2 = [
         "banque": "Crédit agricole",
         "iban_destination": "DE89370400440532013000",
         "pays_destination": "Germany",
-        "montant": "THIS WILL RAISE AN ERROR",
+        "montant": 82.56,
     }
 ]
 
-def write_csv(filename, data):
-    with open(filename, "w", newline="") as csvfile:
+
+def envoyer_fichier_dans_bucket(s3, bucket, filepath: Path, data):
+    with open(str(filepath), "w", newline="") as csvfile:
         fieldnames = [
             "datetime",
             "iban_source",
@@ -122,9 +125,31 @@ def write_csv(filename, data):
         for row in data:
             writer.writerow(row)
 
+    s3.upload_file(str(filepath), bucket, f"data/{filepath.name}")
+
+    # suppression du ficheir CSV
+    filepath.unlink()
+
+
 def main():
-    write_csv("data1.csv", fichier1)
-    write_csv("data2.csv", fichier2)
+
+    # client boto3
+    s3 = boto3.client(
+        "s3",
+        endpoint_url="http://localhost:9001",
+        aws_access_key_id="rustfs",
+        aws_secret_access_key="rustfs",
+    )
+    bucket = "bucketminiprojet"
+
+    # on test si le bucket existe
+    if not any(b["Name"] == bucket for b in s3.list_buckets()["Buckets"]):
+        print(f"Le bucket '{bucket}' n'existe pas. Création en cours...")
+        s3.create_bucket(Bucket=bucket)
+
+    envoyer_fichier_dans_bucket(s3, bucket, Path("data1.csv").resolve(), fichier1)
+    envoyer_fichier_dans_bucket(s3, bucket, Path("data2.csv").resolve(), fichier2)
+
 
 if __name__ == "__main__":
     main()

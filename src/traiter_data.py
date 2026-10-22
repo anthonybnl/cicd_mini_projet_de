@@ -213,7 +213,8 @@ def main():
         sys.exit(1)
     else:
         print("Tous les fichiers ont été traités avec succès.")
-        MEMORY_FILEPATH.unlink()  # on supprime le fichier mémoire car tous les fichiers ont été traités avec succès
+        if MEMORY_FILEPATH.exists():
+            MEMORY_FILEPATH.unlink()  # on supprime le fichier mémoire car tous les fichiers ont été traités avec succès
         
 
 

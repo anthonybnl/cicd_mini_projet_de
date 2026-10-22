@@ -1,0 +1,21 @@
+services:
+  bdd:
+    image: postgres:14.24-trixie
+    container_name: bdd
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+      POSTGRES_DB: mini_projet_de
+    volumes:
+      - ./ddl:/docker-entrypoint-initdb.d
+    ports:
+      - "5432:5432"
+
+  s3:
+    image: rustfs/rustfs:1.0.3
+    container_name: s3
+    environment:
+      RUSTFS_ACCESS_KEY: rustfs
+      RUSTFS_SECRET_KEY: rustfs
+    ports:
+      - "9001:9001"

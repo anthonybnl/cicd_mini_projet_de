@@ -12,13 +12,13 @@ jobs:
         with:
           python-version: 3.12
       - name: install requirements
-        run: python -m pip install -r requirements-dev.txt
+        run: python -m pip install -r requirements.txt
+      - name: Setup de la base de donnée et du conteneur S3
+        run: docker compose up -d
+      - name: On attend que les services soient UP
+        run: sleep 5
       - name: Génération du fichier data.csv
         run: python src/generation_data.py
-      - name: Setup de la base de donnée
-        run: ./lancer-bdd.sh
-      - name: On attend que la BDD soit UP
-        run: sleep 5
       - name: Lancer le traitement des données
         uses: nick-fields/retry@v3
         with:
