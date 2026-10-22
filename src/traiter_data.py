@@ -41,7 +41,11 @@ def traiter_data(data: list[dict]):
 
     results_montants_par_banque = []
     for banque, rows in grouped.items():
-        total = sum(float(row["montant"]) for row in rows)
+
+        # test pour que la CI échoue en changeant la méthode de calcul
+        total = sum(float(row["montant"]) for row in rows) / len(rows) # on ne calcule plus la somme mais la moyenne
+        # les tests pytest ne vont pas passer car on ne calcule plus la somme mais la moyenne
+
         results_montants_par_banque.append((banque, total))
 
     # somme des montant reçus par iban de destination
