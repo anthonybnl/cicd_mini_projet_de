@@ -20,7 +20,11 @@ jobs:
       - name: On attend que la BDD soit UP
         run: sleep 5
       - name: Lancer le traitement des données
-        run: python src/traiter_data.py
+        uses: nick-fields/retry@v3
+        with:
+          timeout_seconds: 5
+          max_attempts: 2
+          command: python src/traiter_data.py
       - name: Tests (test des données en BDD)
         run: pytest -vv
     env:

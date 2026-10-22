@@ -1,4 +1,6 @@
-all_data = [
+import csv
+
+fichier1 = [
     {
         "datetime": "2026-09-11T08:54:00",
         "iban_source": "DE89370400440532013000",
@@ -91,22 +93,38 @@ all_data = [
     },
 ]
 
-# génération du CSV
+fichier2 = [
+    {
+        "datetime": "2026-09-11T08:54:00",
+        "iban_source": "DE89370400440532013000",
+        "pays_source": "France",
+        "banque": "Crédit agricole",
+        "iban_destination": "DE89370400440532013000",
+        "pays_destination": "Germany",
+        "montant": "THIS WILL RAISE AN ERROR",
+    }
+]
 
-import csv
+def write_csv(filename, data):
+    with open(filename, "w", newline="") as csvfile:
+        fieldnames = [
+            "datetime",
+            "iban_source",
+            "pays_source",
+            "banque",
+            "iban_destination",
+            "pays_destination",
+            "montant",
+        ]
+        writer = csv.DictWriter(csvfile, fieldnames=fieldnames, lineterminator="\n")
 
-with open("data.csv", "w", newline="") as csvfile:
-    fieldnames = [
-        "datetime",
-        "iban_source",
-        "pays_source",
-        "banque",
-        "iban_destination",
-        "pays_destination",
-        "montant",
-    ]
-    writer = csv.DictWriter(csvfile, fieldnames=fieldnames, lineterminator="\n")
+        writer.writeheader()
+        for row in data:
+            writer.writerow(row)
 
-    writer.writeheader()
-    for row in all_data:
-        writer.writerow(row)
+def main():
+    write_csv("data1.csv", fichier1)
+    write_csv("data2.csv", fichier2)
+
+if __name__ == "__main__":
+    main()
