@@ -8,7 +8,7 @@ jobs:
       - name: Check out repository code
         uses: actions/checkout@v6
       - name: Set up Python 12
-        uses: actions/setup-python@v5
+        uses: actions/setup-python@v6
         with:
           python-version: 3.12
       - name: install requirements
@@ -21,5 +21,7 @@ jobs:
         run: sleep 5
       - name: Lancer le traitement des données
         run: python src/traiter_data.py
+      - name: Tests (test des données en BDD)
+        run: pytest -vv
     env:
       DATABASE_URL: "postgresql+psycopg2://postgres:postgres@localhost/mini_projet_de"
