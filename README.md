@@ -4,6 +4,12 @@ Dans le cadre du cours EFREI M2 CI/CD : Mini projet Data Engineering
 
 [![pipeline](https://github.com/anthonybnl/cicd_mini_projet_de/actions/workflows/pipeline.yml/badge.svg)](https://github.com/anthonybnl/cicd_mini_projet_de/actions/workflows/pipeline.yml)
 
+## Génération des données
+
+Le script `src/generation_data.py` génère 3 fichiers CSV de 5 à 10 transactions chacun, puis les envoie dans le bucket S3.
+
+Les données générées aléatoirement mais avec une **seed fixe** (`SEED = 2026`) : elles sont donc identiques à chaque exécution ce qui rend le pipeline testable (`pytest`)
+
 ## Simulation d'une erreur de calcul
 
 [Lien vers la pipeline](https://github.com/anthonybnl/cicd_mini_projet_de/actions/runs/39763114617)
@@ -46,3 +52,12 @@ Résultat :
 ![](doc/02.png)
 
 Nous constatons bien que le retry fonctionne correctement : la tâche se lance une deuxième fois et seuls les fichiers non traités avec succès lors des tentatives précédentes sont relancés.
+
+## Installation de Tesseract (OCR)
+
+Afin de faire fonctionner `pytesseract` pour l'OCR, il est nécessaire d'installer Tesseract :
+
+```bash
+sudo apt install tesseract-ocr
+sudo apt install libtesseract-dev
+```

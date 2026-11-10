@@ -80,45 +80,60 @@ def get_data_from_bdd():
 
 @pytest.fixture
 def data_expected():
+    # valeurs attendues pour les données générées avec SEED = 2026 (voir generation_data.py)
     # ces données sont triées par IBAN, banque et datetime_tx pour que cela corresponde aux données de la BDD
     montants_par_iban = [
-        MontantParIban(iban="DE89370400440532013000", montant=112.24),
-        MontantParIban(iban="ES9121000418450200051332", montant=87.06),
-        MontantParIban(iban="FR7630006000011234567890189", montant=12747.99),
+        MontantParIban(iban="DE89370400440532013000", montant=1213.29),
+        MontantParIban(iban="ES9121000418450200051332", montant=11132.69),
+        MontantParIban(iban="FR7613306000015678901234567", montant=10349.75),
+        MontantParIban(iban="FR7630003000409876543210925", montant=6987.72),
+        MontantParIban(iban="FR7630006000011234567890189", montant=814.95),
+        MontantParIban(iban="GB29NWBK60161331926819", montant=2995.95),
     ]
 
     montants_par_banque = [
-        MontantParBanque(banque="Caisse d'épargne", montant=82.56),
-        MontantParBanque(banque="Crédit agricole", montant=5297.99),
-        MontantParBanque(banque="Deutsche Bank", montant=96.74),
-        MontantParBanque(banque="Société Générale", montant=7470.0),
+        MontantParBanque(banque="CaixaBank", montant=11132.69),
+        MontantParBanque(banque="Crédit agricole", montant=10349.75),
+        MontantParBanque(banque="Deutsche Bank", montant=1213.29),
+        MontantParBanque(banque="NatWest", montant=2995.95),
+        MontantParBanque(banque="Société Générale", montant=7802.67),
     ]
 
     montants_par_iban_destination = [
-        MontantParIbanDestination(iban="DE89370400440532013000", montant=5235.0),
-        MontantParIbanDestination(iban="ES9121000418450200051332", montant=7546.24),
-        MontantParIbanDestination(iban="FR7630006000011234567890189", montant=166.05),
+        MontantParIbanDestination(iban="DE89370400440532013000", montant=9520.14),
+        MontantParIbanDestination(iban="ES9121000418450200051332", montant=2656.46),
+        MontantParIbanDestination(iban="FR7613306000015678901234567", montant=1708.61),
+        MontantParIbanDestination(iban="FR7630006000011234567890189", montant=1197.44),
+        MontantParIbanDestination(iban="GB29NWBK60161331926819", montant=18411.7),
     ]
 
     transactions_montant_eleve = [
-
         TransactionMontantEleve(
-            datetime_tx=datetime.datetime(2026, 1, 8, 14, 20),
-            iban_source="FR7630006000011234567890189",
-            pays_source="United Kingdom",
-            banque="Crédit agricole",
-            iban_destination="DE89370400440532013000",
-            pays_destination="Spain",
-            montant=5199.0,
-        ),
-                TransactionMontantEleve(
-            datetime_tx=datetime.datetime(2026, 6, 17, 23, 13),
-            iban_source="FR7630006000011234567890189",
-            pays_source="Germany",
+            datetime_tx=datetime.datetime(2026, 7, 15, 21, 44),
+            iban_source="FR7630003000409876543210925",
+            pays_source="France",
             banque="Société Générale",
-            iban_destination="ES9121000418450200051332",
-            pays_destination="Spain",
-            montant=7459.0,
+            iban_destination="DE89370400440532013000",
+            pays_destination="Germany",
+            montant=5749.22,
+        ),
+        TransactionMontantEleve(
+            datetime_tx=datetime.datetime(2026, 8, 14, 0, 8),
+            iban_source="ES9121000418450200051332",
+            pays_source="Spain",
+            banque="CaixaBank",
+            iban_destination="GB29NWBK60161331926819",
+            pays_destination="United Kingdom",
+            montant=8554.31,
+        ),
+        TransactionMontantEleve(
+            datetime_tx=datetime.datetime(2026, 11, 4, 10, 47),
+            iban_source="FR7613306000015678901234567",
+            pays_source="France",
+            banque="Crédit agricole",
+            iban_destination="GB29NWBK60161331926819",
+            pays_destination="United Kingdom",
+            montant=9454.84,
         ),
     ]
 

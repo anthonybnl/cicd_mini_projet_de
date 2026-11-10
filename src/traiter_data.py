@@ -14,7 +14,7 @@ from db import get_database_engine
 def extraire_data(file_path) -> list[dict]:
     data = []
 
-    with open(file_path) as csvfile:
+    with open(file_path, encoding="utf-8") as csvfile:
         reader = csv.DictReader(csvfile)
         data = list(reader)
     return data

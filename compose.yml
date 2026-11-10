@@ -19,3 +19,9 @@ services:
       RUSTFS_SECRET_KEY: rustfs
     ports:
       - "9001:9001"
+
+  adminer:
+    image: adminer:latest
+    container_name: adminer
+    ports:
+      - "8081:8080"

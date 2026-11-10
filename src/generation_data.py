@@ -1,126 +1,70 @@
 import csv
+import random
+from datetime import datetime, timedelta
 from pathlib import Path
 
 import boto3
 
-fichier1 = [
-    {
-        "datetime": "2026-09-11T08:54:00",
-        "iban_source": "DE89370400440532013000",
-        "pays_source": "France",
-        "banque": "Crédit agricole",
-        "iban_destination": "DE89370400440532013000",
-        "pays_destination": "Germany",
-        "montant": 32,
-    },
-    {
-        "datetime": "2026-06-17T23:13:00",
-        "iban_source": "FR7630006000011234567890189",
-        "pays_source": "Germany",
-        "banque": "Société Générale",
-        "iban_destination": "ES9121000418450200051332",
-        "pays_destination": "Spain",
-        "montant": 7459,
-    },
-    {
-        "datetime": "2026-06-17T23:13:00",
-        "iban_source": "FR7630006000011234567890189",
-        "pays_source": "Germany",
-        "banque": "Société Générale",
-        "iban_destination": "ES9121000418450200051332",
-        "pays_destination": "United Kingdom",
-        "montant": 7,
-    },
-    {
-        "datetime": "2026-06-17T23:13:00",
-        "iban_source": "DE89370400440532013000",
-        "pays_source": "United Kingdom",
-        "banque": "Deutsche Bank",
-        "iban_destination": "ES9121000418450200051332",
-        "pays_destination": "Germany",
-        "montant": 24.24,
-    },
-    {
-        "datetime": "2026-01-08T14:20:00",
-        "iban_source": "FR7630006000011234567890189",
-        "pays_source": "Germany",
-        "banque": "Deutsche Bank",
-        "iban_destination": "FR7630006000011234567890189",
-        "pays_destination": "United Kingdom",
-        "montant": 72,
-    },
-    {
-        "datetime": "2026-01-08T14:20:00",
-        "iban_source": "FR7630006000011234567890189",
-        "pays_source": "United Kingdom",
-        "banque": "Crédit agricole",
-        "iban_destination": "DE89370400440532013000",
-        "pays_destination": "Spain",
-        "montant": 5199,
-    },
-    {
-        "datetime": "2026-09-11T08:54:00",
-        "iban_source": "ES9121000418450200051332",
-        "pays_source": "United Kingdom",
-        "banque": "Deutsche Bank",
-        "iban_destination": "FR7630006000011234567890189",
-        "pays_destination": "United Kingdom",
-        "montant": 0.5,
-    },
-    {
-        "datetime": "2026-09-11T08:54:00",
-        "iban_source": "DE89370400440532013000",
-        "pays_source": "France",
-        "banque": "Crédit agricole",
-        "iban_destination": "ES9121000418450200051332",
-        "pays_destination": "France",
-        "montant": 56,
-    },
-    {
-        "datetime": "2026-09-11T08:54:00",
-        "iban_source": "ES9121000418450200051332",
-        "pays_source": "France",
-        "banque": "Société Générale",
-        "iban_destination": "DE89370400440532013000",
-        "pays_destination": "Germany",
-        "montant": 4,
-    },
-    {
-        "datetime": "2026-09-11T08:54:00",
-        "iban_source": "FR7630006000011234567890189",
-        "pays_source": "Spain",
-        "banque": "Crédit agricole",
-        "iban_destination": "FR7630006000011234567890189",
-        "pays_destination": "Germany",
-        "montant": 10.99,
-    },
+# On fixe la seed (du random) afin que le process soit reproductible (les tests passeront donc puisque les données seront toujours les mêmes)
+SEED = 2026
+NB_FICHIERS = 3
+
+COMPTES = {
+    "FR7630006000011234567890189": ("France", "Société Générale"),
+    "FR7630003000409876543210925": ("France", "Société Générale"),
+    "FR7613306000015678901234567": ("France", "Crédit agricole"),
+    "DE89370400440532013000": ("Germany", "Deutsche Bank"),
+    "GB29NWBK60161331926819": ("United Kingdom", "NatWest"),
+    "ES9121000418450200051332": ("Spain", "CaixaBank"),
+}
+
+COLONNES = [
+    "datetime",
+    "iban_source",
+    "pays_source",
+    "banque",
+    "iban_destination",
+    "pays_destination",
+    "montant",
 ]
 
-fichier2 = [
-    {
-        "datetime": "2026-07-06T00:00:00",
-        "iban_source": "ES9121000418450200051332",
-        "pays_source": "France",
-        "banque": "Caisse d'épargne",
-        "iban_destination": "FR7630006000011234567890189",
-        "pays_destination": "France",
-        "montant": 82.56,
+
+def generer_montant() -> float:
+    if random.random() < 0.2:
+        return round(random.uniform(5000, 10000), 2)
+    return round(random.uniform(1, 1000), 2)
+
+
+def generer_transaction() -> dict:
+    referentiel_iban = list(COMPTES.keys())
+
+    iban_source = random.choice(referentiel_iban)
+    iban_destination = random.choice([iban for iban in referentiel_iban if iban != iban_source])
+
+    pays_source, banque = COMPTES[iban_source]
+    pays_destination, _ = COMPTES[iban_destination]
+
+    date = datetime(2026, 1, 1) + timedelta(minutes=random.randint(0, 365 * 24 * 60))
+
+    return {
+        "datetime": date.isoformat(),
+        "iban_source": iban_source,
+        "pays_source": pays_source,
+        "banque": banque,
+        "iban_destination": iban_destination,
+        "pays_destination": pays_destination,
+        "montant": generer_montant(),
     }
-]
+
+
+def generer_fichier() -> list[dict]:
+    nb_transactions = random.randint(5, 10)
+    return [generer_transaction() for _ in range(nb_transactions)]
 
 
 def envoyer_fichier_dans_bucket(s3, bucket, filepath: Path, data):
-    with open(str(filepath), "w", newline="") as csvfile:
-        fieldnames = [
-            "datetime",
-            "iban_source",
-            "pays_source",
-            "banque",
-            "iban_destination",
-            "pays_destination",
-            "montant",
-        ]
-        writer = csv.DictWriter(csvfile, fieldnames=fieldnames, lineterminator="\n")
+    with open(str(filepath), "w", newline="", encoding="utf-8") as csvfile:
+        writer = csv.DictWriter(csvfile, fieldnames=COLONNES, lineterminator="\n")
 
         writer.writeheader()
         for row in data:
@@ -128,11 +72,12 @@ def envoyer_fichier_dans_bucket(s3, bucket, filepath: Path, data):
 
     s3.upload_file(str(filepath), bucket, f"data/{filepath.name}")
 
-    # suppression du ficheir CSV
+    # suppression du fichier CSV local
     filepath.unlink()
 
 
 def main():
+    random.seed(SEED)
 
     # client boto3
     s3 = boto3.client(
@@ -148,8 +93,11 @@ def main():
         print(f"Le bucket '{bucket}' n'existe pas. Création en cours...")
         s3.create_bucket(Bucket=bucket)
 
-    envoyer_fichier_dans_bucket(s3, bucket, Path("data1.csv").resolve(), fichier1)
-    envoyer_fichier_dans_bucket(s3, bucket, Path("data2.csv").resolve(), fichier2)
+    for i in range(1, NB_FICHIERS + 1):
+        data = generer_fichier()
+        filepath = Path(f"transactions_{i:02d}.csv").resolve()
+        envoyer_fichier_dans_bucket(s3, bucket, filepath, data)
+        print(f"{filepath.name} : {len(data)} transactions envoyées")
 
     print("Fichiers envoyés dans le bucket avec succès.")
 
