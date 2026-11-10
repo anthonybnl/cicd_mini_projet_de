@@ -26,32 +26,21 @@ Comme on peut le voir, les tests ont échoué car la règle de calcul a été mo
 
 [Lien vers la pipeline](https://github.com/anthonybnl/cicd_mini_projet_de/actions/runs/39779392118)
 
+Le script de traitement liste les fichiers CSV présents dans le bucket et les traite **un par un**.
 
-Pour avoir une gestion du retry, nous avons commencé par changer notre génération de données : celle ci génère désormais 2 fichiers CSV, dont un comportant une erreur (chaîne de caractères au lieu d'un montant)
+### Mémoire des fichiers traités
 
-Ensuite nous avons modifié le script de traitement : celui ci liste les fichiers *.csv à traiter.  
-Pour chaque fichier, il le traite, et si le traitement réussit, ce fichier est inscrit dans une mémoire (fichier JSON en local)  
-Si un des fichiers échoue, celui ci n'est pas inscrit dans la mémoire.
-Si tous les fichiers sont traités avec succès, le fichier mémoire est supprimé.
+La liste des fichiers déjà traités est stockée en base, dans la table `fichiers_traites` (voir `ddl/02-fichiers-traites.sql`).
 
-Ainsi, lors du retry dans le pipeline, le script de traitement ne va relancer que les fichiers qui n'ont pas été traités avec succès lors des tentatives précédentes.
+Pour chaque fichier, l'insertion des résultats **et** l'inscription du fichier dans `fichiers_traites` se font dans **une seule transaction**.  
+S'il n'y a pas d'erreur, le fichier est traité et marqué comme traité. Sinon tout est annulé : **rollback**.
 
-dans le pipeline CI/CD :
+Les montants s'additionnent à ceux déjà en base, c'est l'agrégation incrémentale.
 
-```yml
-- name: Lancer le traitement des données
-uses: nick-fields/retry@v3
-with:
-    timeout_seconds: 5
-    max_attempts: 2
-    command: python src/traiter_data.py
-```
+### Deux niveaux de retry
 
-Résultat :
-
-![](doc/02.png)
-
-Nous constatons bien que le retry fonctionne correctement : la tâche se lance une deuxième fois et seuls les fichiers non traités avec succès lors des tentatives précédentes sont relancés.
+1. **Dans le script** : le téléchargement depuis le S3 et l'insertion en base sont retentés 3 fois (5 secondes d'attente), pour les erreurs passagères (S3 ou BDD indisponible un court instant)
+2. **Dans la pipeline** : si un fichier est toujours en erreur, le script se termine avec un code d'erreur et la pipeline le relance. Grâce à la table `fichiers_traites`, seuls les fichiers en erreur sont rejoués.
 
 ## Installation de Tesseract (OCR)
 

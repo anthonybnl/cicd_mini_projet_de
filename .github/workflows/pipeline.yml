@@ -22,7 +22,7 @@ jobs:
       - name: Lancer le traitement des données
         uses: nick-fields/retry@v3
         with:
-          timeout_seconds: 5
+          timeout_seconds: 60
           max_attempts: 2
           command: python src/traiter_data.py
       - name: Tests (test des données en BDD)

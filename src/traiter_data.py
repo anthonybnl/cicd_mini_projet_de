@@ -1,5 +1,4 @@
 import csv
-import json
 import re
 import sys
 import time
@@ -65,121 +64,113 @@ def traiter_data(data: list[dict]):
     )
 
 
-def inserer_montants_par_iban(engine, results_montants_par_iban):
-    with engine.begin() as conn:
-        for iban, total in results_montants_par_iban:
-            conn.execute(
-                text(
-                    "INSERT INTO montants_par_iban (iban, montant) VALUES (:iban, :total) "
-                    "ON CONFLICT (iban) DO UPDATE SET montant = EXCLUDED.montant"
-                ),
-                {"iban": iban, "total": total},
-            )
-        conn.commit()
+def avec_retry(fonction, *args, nb_essais=3, attente=5):
+    # relance la fonction en cas d'erreur (S3 ou BDD indisponible un court instant)
+    for essai in range(1, nb_essais + 1):
+        try:
+            return fonction(*args)
+        except Exception as e:
+            print(f"Erreur (tentative {essai}/{nb_essais}) : {type(e).__name__} {e}")
+            if essai == nb_essais:
+                raise
+            print(f"Nouvelle tentative dans {attente} secondes...")
+            time.sleep(attente)
 
 
-def inserer_montants_par_banque(engine, results_montants_par_banque):
-    with engine.begin() as conn:
-        for banque, total in results_montants_par_banque:
-            conn.execute(
-                text(
-                    "INSERT INTO montants_par_banque (banque, montant) VALUES (:banque, :total) "
-                    "ON CONFLICT (banque) DO UPDATE SET montant = EXCLUDED.montant"
-                ),
-                {"banque": banque, "total": total},
-            )
-        conn.commit()
+# les montants s'additionnent à ceux déjà en base :
+# chaque fichier vient compléter les totaux des fichiers précédents
 
 
-def inserer_montants_par_iban_destination(
-    engine, results_montants_par_iban_destination
-):
-    with engine.begin() as conn:
-        for iban, total in results_montants_par_iban_destination:
-            conn.execute(
-                text(
-                    "INSERT INTO montants_par_iban_destination (iban, montant) VALUES (:iban, :total) "
-                    "ON CONFLICT (iban) DO UPDATE SET montant = EXCLUDED.montant"
-                ),
-                {"iban": iban, "total": total},
-            )
-        conn.commit()
+def inserer_montants_par_iban(conn, results_montants_par_iban):
+    for iban, total in results_montants_par_iban:
+        conn.execute(
+            text(
+                "INSERT INTO montants_par_iban (iban, montant) VALUES (:iban, :total) "
+                "ON CONFLICT (iban) DO UPDATE SET montant = montants_par_iban.montant + EXCLUDED.montant"
+            ),
+            {"iban": iban, "total": total},
+        )
 
 
-def inserer_transactions_cinq_mille(engine, transactions_cinq_mille):
-    with engine.begin() as conn:
-        for row in transactions_cinq_mille:
-            conn.execute(
-                text(
-                    "INSERT INTO transactions_montant_eleve (datetime_tx, montant, iban_source, pays_source, iban_destination, pays_destination, banque) "
-                    "VALUES (:datetime, :montant, :iban_source, :pays_source, :iban_destination, :pays_destination, :banque) "
-                    "ON CONFLICT (datetime_tx, iban_source, iban_destination) DO NOTHING"
-                ),
-                {
-                    "datetime": row["datetime"],
-                    "montant": row["montant"],
-                    "iban_source": row["iban_source"],
-                    "pays_source": row["pays_source"],
-                    "iban_destination": row["iban_destination"],
-                    "pays_destination": row["pays_destination"],
-                    "banque": row["banque"],
-                },
-            )
-        conn.commit()
+def inserer_montants_par_banque(conn, results_montants_par_banque):
+    for banque, total in results_montants_par_banque:
+        conn.execute(
+            text(
+                "INSERT INTO montants_par_banque (banque, montant) VALUES (:banque, :total) "
+                "ON CONFLICT (banque) DO UPDATE SET montant = montants_par_banque.montant + EXCLUDED.montant"
+            ),
+            {"banque": banque, "total": total},
+        )
 
 
-def inserer_data(
-    engine,
-    results_montants_par_iban,
-    results_montants_par_banque,
-    results_montants_par_iban_destination,
-    transactions_cinq_mille,
-):
-    inserer_montants_par_iban(engine, results_montants_par_iban)
-    inserer_montants_par_banque(engine, results_montants_par_banque)
-    inserer_montants_par_iban_destination(engine, results_montants_par_iban_destination)
-    inserer_transactions_cinq_mille(engine, transactions_cinq_mille)
+def inserer_montants_par_iban_destination(conn, results_montants_par_iban_destination):
+    for iban, total in results_montants_par_iban_destination:
+        conn.execute(
+            text(
+                "INSERT INTO montants_par_iban_destination (iban, montant) VALUES (:iban, :total) "
+                "ON CONFLICT (iban) DO UPDATE SET montant = montants_par_iban_destination.montant + EXCLUDED.montant"
+            ),
+            {"iban": iban, "total": total},
+        )
 
 
-def traiter_lot_donnee(data: list[dict]):
+def inserer_transactions_cinq_mille(conn, transactions_cinq_mille):
+    for row in transactions_cinq_mille:
+        conn.execute(
+            text(
+                "INSERT INTO transactions_montant_eleve (datetime_tx, montant, iban_source, pays_source, iban_destination, pays_destination, banque) "
+                "VALUES (:datetime, :montant, :iban_source, :pays_source, :iban_destination, :pays_destination, :banque) "
+                "ON CONFLICT (datetime_tx, iban_source, iban_destination) DO NOTHING"
+            ),
+            {
+                "datetime": row["datetime"],
+                "montant": row["montant"],
+                "iban_source": row["iban_source"],
+                "pays_source": row["pays_source"],
+                "iban_destination": row["iban_destination"],
+                "pays_destination": row["pays_destination"],
+                "banque": row["banque"],
+            },
+        )
+
+
+def marquer_fichier_traite(conn, nom_fichier: str):
+    # pas de ON CONFLICT ici : si le fichier est déjà en base, la clé primaire
+    # fait échouer la transaction et rien n'est compté deux fois
+    conn.execute(
+        text("INSERT INTO fichiers_traites (nom_fichier) VALUES (:nom_fichier)"),
+        {"nom_fichier": nom_fichier},
+    )
+
+
+def inserer_data(engine, nom_fichier: str, resultats):
     (
         results_montants_par_iban,
         results_montants_par_banque,
         results_montants_par_iban_destination,
         transactions_cinq_mille,
-    ) = traiter_data(data)
+    ) = resultats
 
-    print("Montants par IBAN:")
-    for iban, total in results_montants_par_iban:
-        print(f"IBAN: {iban}, Total: {total}")
-    print("\nMontants par banque:")
+    # une seule transaction pour tout le fichier : si une insertion plante,
+    # tout est annulé (rollback) et le fichier n'est pas marqué comme traité
+    with engine.begin() as conn:
+        inserer_montants_par_iban(conn, results_montants_par_iban)
+        inserer_montants_par_banque(conn, results_montants_par_banque)
+        inserer_montants_par_iban_destination(conn, results_montants_par_iban_destination)
+        inserer_transactions_cinq_mille(conn, transactions_cinq_mille)
+        marquer_fichier_traite(conn, nom_fichier)
 
-    for banque, total in results_montants_par_banque:
-        print(f"Banque: {banque}, Total: {total}")
-    print("\nMontants par IBAN de destination:")
 
-    for iban, total in results_montants_par_iban_destination:
-        print(f"IBAN: {iban}, Total: {total}")
+def lire_fichiers_traites(engine) -> set[str]:
+    with engine.connect() as conn:
+        result = conn.execute(text("SELECT nom_fichier FROM fichiers_traites"))
+        return {nom_fichier for (nom_fichier,) in result.fetchall()}
 
-    print("\nTransactions >= 5000:")
-    for row in transactions_cinq_mille:
-        print(
-            f"date: {row['datetime']}, montant: {row['montant']}, iban_source: {row['iban_source']}, iban_destination: {row['iban_destination']}, banque: {row['banque']}"
-        )
-
-    engine = get_database_engine()
-    inserer_data(
-        engine,
-        results_montants_par_iban,
-        results_montants_par_banque,
-        results_montants_par_iban_destination,
-        transactions_cinq_mille,
-    )
 
 def lister_fichiers_s3(s3, bucket: str) -> list[str]:
     # pour tester le retry
     # return ["data/data1.csv", "data/data3.csv"]
-    
+
     objects = s3.list_objects_v2(Bucket=bucket)
     liste_fichiers = [obj["Key"] for obj in objects.get("Contents", [])]
     return liste_fichiers
@@ -188,27 +179,26 @@ def lister_fichiers_s3(s3, bucket: str) -> list[str]:
 def telecharger_un_fichier_s3(s3, bucket: str, key: str) -> Path:
     match = re.match(r"data/([a-zA-Z0-9_]+\.csv)", key)
     if not match:
-        print(f"Le key '{key}' ne correspond pas au pattern attendu 'data/<fichier>.csv'")
-    else:
-        nom_fichier = match.group(1)
-        local_file = Path(nom_fichier)
-        print(f"Téléchargement du fichier {key} vers {local_file} ...")
+        raise ValueError(f"Le key '{key}' ne correspond pas au pattern attendu 'data/<fichier>.csv'")
 
-        # téléchargement avec retry
-        max_retry = 3
-        for attempt in range(max_retry):
-            try:
-                s3.download_file(bucket, key, local_file)
-                break
-            except Exception as e:
-                print(f"Erreur lors du téléchargement du fichier {key} (tentative {attempt + 1}) : {type(e).__name__} {e}")
-                if attempt == max_retry - 1:
-                    raise
-                else:
-                    print("Nouvelle tentative dans 5 seconde...")
-                    time.sleep(5)
+    local_file = Path(match.group(1))
+    print(f"Téléchargement du fichier {key} vers {local_file} ...")
+    avec_retry(s3.download_file, bucket, key, str(local_file))
+    return local_file
 
-        return local_file
+
+def traiter_un_fichier(s3, bucket: str, engine, key_s3: str):
+    fichier_csv = telecharger_un_fichier_s3(s3, bucket, key_s3)
+    try:
+        data = extraire_data(fichier_csv)
+        resultats = traiter_data(data)
+    finally:
+        # suppression du fichier local, même en cas d'erreur
+        fichier_csv.unlink()
+
+    print(f"{len(data)} transactions, dont {len(resultats[3])} >= 5000. Insertion en base ...")
+    avec_retry(inserer_data, engine, key_s3, resultats)
+
 
 def main():
 
@@ -227,54 +217,33 @@ def main():
     liste_fichiers_s3 = sorted(lister_fichiers_s3(s3, bucket))
     print("Liste des fichiers S3 :", liste_fichiers_s3)
 
-    # gestion du retry : on mémorise les fichiers traités
-    MEMORY_FILEPATH = Path("fichiers_traite.json").resolve()
+    # gestion du retry : la liste des fichiers déjà traités est stockée en base
+    engine = get_database_engine()
+    fichiers_traites = avec_retry(lire_fichiers_traites, engine)
 
-    fichiers_traite = []
-    has_error = False
-    all_data = []
-
-    if MEMORY_FILEPATH.exists():
-        with open(MEMORY_FILEPATH, "r") as f:
-            fichiers_traite = json.load(f)
+    fichiers_en_erreur = []
 
     for key_s3 in liste_fichiers_s3:
 
-        if str(key_s3) in fichiers_traite:
-            print(f"Le fichier dans le bucket {key_s3} a déjà été traité. Passage au suivant.")
+        if key_s3 in fichiers_traites:
+            print(f"Le fichier {key_s3} a déjà été traité. Passage au suivant.")
             continue
-        # on traite le fichier
+
+        print(f"\nTraitement du fichier : {key_s3} ...")
         try:
-            print(f"Traitement du fichier : {key_s3} ...")
-            fichier_csv = telecharger_un_fichier_s3(s3, bucket, key_s3)
-            data = extraire_data(fichier_csv)
-            # suppression du fichier local après traitement
-            Path(fichier_csv).unlink()
-            all_data += data
-
-            # on enregistre le fichier traité dans la liste et le fichier JSON
-            fichiers_traite.append(str(key_s3))
-            with open(MEMORY_FILEPATH, "w") as f:
-                json.dump(fichiers_traite, f)
+            traiter_un_fichier(s3, bucket, engine, key_s3)
+            print(f"Fichier {key_s3} traité avec succès.")
         except Exception as e:  # noqa: BLE001
-            print(
-                f"Erreur lors du traitement du fichier {key_s3} : {type(e).__name__} {e}"
-            )
-            has_error = True
+            # on passe au fichier suivant : un fichier en erreur ne bloque pas les autres
+            print(f"Erreur lors du traitement du fichier {key_s3} : {type(e).__name__} {e}")
+            fichiers_en_erreur.append(key_s3)
 
-    if len(all_data) > 0:
-        print("Calcul des agrégats ...")
-        traiter_lot_donnee(all_data)
-
-    if has_error:
-        print(
-            "Certains fichiers n'ont pas pu être traités.\nLe fichier mémoire est conservé pour le retry"
-        )
+    if fichiers_en_erreur:
+        print(f"\nFichiers en erreur : {fichiers_en_erreur}")
+        print("Ils seront retraités au prochain lancement (les autres ne seront pas rejoués).")
         sys.exit(1)
-    else:
-        print("Tous les fichiers ont été traités avec succès.")
-        if MEMORY_FILEPATH.exists():
-            MEMORY_FILEPATH.unlink()  # on supprime le fichier mémoire car tous les fichiers ont été traités avec succès
+
+    print("\nTous les fichiers ont été traités avec succès.")
 
 
 if __name__ == "__main__":
