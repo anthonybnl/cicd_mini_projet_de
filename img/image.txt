@@ -1,0 +1,8 @@
+datetime: 2026-01-01T00:00:00
+iban_source: IBAN_IMAGE
+pays_source: France
+
+banque: Société Générale
+iban_destination: IBAN_IMAGE_DEST
+pays_destination: Germany
+montant: 47

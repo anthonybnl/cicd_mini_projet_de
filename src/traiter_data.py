@@ -6,12 +6,57 @@ import time
 from pathlib import Path
 
 import boto3
+import pytesseract
+from PIL import Image
 from sqlalchemy import text
 
 from db import get_database_engine
 
 
-def extraire_data(file_path) -> list[dict]:
+def extraire_data_ocr(file_path: Path) -> list[dict]:
+    image = Image.open(file_path)
+
+    # affichage des caractéristiques de l'image
+    print(f"Traitement de l'image: {image.format} {image.size} {image.mode}")
+
+    ocr: str = pytesseract.image_to_string(image)
+
+    with open(file_path.with_suffix(".txt"), "w") as f:
+        f.write(ocr)
+
+    data_dict = {}
+    for line in ocr.splitlines():
+        match = re.match(r"(\w+):\s*(.*)", line)
+        if match:
+            key, value = match.groups()
+            if key == "montant":
+                value = float(value)
+            data_dict[key] = value
+
+    required_fields = [
+        "datetime",
+        "iban_source",
+        "pays_source",
+        "banque",
+        "iban_destination",
+        "pays_destination",
+        "montant",
+    ]
+
+    for field in required_fields:
+        if field not in data_dict:
+            raise ValueError(f"Champ requis manquant : {field}")
+
+    print(f"Data extraite de l'image: {data_dict}")
+
+    return [data_dict]
+
+
+def extraire_data(file_path: Path) -> list[dict]:
+    # si extension png, OCR
+    if file_path.suffix.lower() == ".png":
+        return extraire_data_ocr(file_path)
+
     data = []
 
     with open(file_path) as csvfile:
@@ -176,19 +221,22 @@ def traiter_lot_donnee(data: list[dict]):
         transactions_cinq_mille,
     )
 
+
 def lister_fichiers_s3(s3, bucket: str) -> list[str]:
     # pour tester le retry
     # return ["data/data1.csv", "data/data3.csv"]
-    
+
     objects = s3.list_objects_v2(Bucket=bucket)
     liste_fichiers = [obj["Key"] for obj in objects.get("Contents", [])]
-    return liste_fichiers
+    return liste_fichiers + ["IMG"]
 
 
 def telecharger_un_fichier_s3(s3, bucket: str, key: str) -> Path:
     match = re.match(r"data/([a-zA-Z0-9_]+\.csv)", key)
     if not match:
-        print(f"Le key '{key}' ne correspond pas au pattern attendu 'data/<fichier>.csv'")
+        print(
+            f"Le key '{key}' ne correspond pas au pattern attendu 'data/<fichier>.csv'"
+        )
     else:
         nom_fichier = match.group(1)
         local_file = Path(nom_fichier)
@@ -201,7 +249,9 @@ def telecharger_un_fichier_s3(s3, bucket: str, key: str) -> Path:
                 s3.download_file(bucket, key, local_file)
                 break
             except Exception as e:
-                print(f"Erreur lors du téléchargement du fichier {key} (tentative {attempt + 1}) : {type(e).__name__} {e}")
+                print(
+                    f"Erreur lors du téléchargement du fichier {key} (tentative {attempt + 1}) : {type(e).__name__} {e}"
+                )
                 if attempt == max_retry - 1:
                     raise
                 else:
@@ -209,6 +259,7 @@ def telecharger_un_fichier_s3(s3, bucket: str, key: str) -> Path:
                     time.sleep(5)
 
         return local_file
+
 
 def main():
 
@@ -239,17 +290,24 @@ def main():
             fichiers_traite = json.load(f)
 
     for key_s3 in liste_fichiers_s3:
-
         if str(key_s3) in fichiers_traite:
-            print(f"Le fichier dans le bucket {key_s3} a déjà été traité. Passage au suivant.")
+            print(
+                f"Le fichier dans le bucket {key_s3} a déjà été traité. Passage au suivant."
+            )
             continue
         # on traite le fichier
         try:
             print(f"Traitement du fichier : {key_s3} ...")
-            fichier_csv = telecharger_un_fichier_s3(s3, bucket, key_s3)
+            if key_s3 != "IMG":
+                fichier_csv = telecharger_un_fichier_s3(s3, bucket, key_s3)
+            else:
+                fichier_csv = Path("img/image.png")
+
             data = extraire_data(fichier_csv)
-            # suppression du fichier local après traitement
-            Path(fichier_csv).unlink()
+
+            if key_s3 != "IMG":
+                # suppression du fichier local après traitement
+                Path(fichier_csv).unlink()
             all_data += data
 
             # on enregistre le fichier traité dans la liste et le fichier JSON

@@ -46,3 +46,12 @@ Résultat :
 ![](doc/02.png)
 
 Nous constatons bien que le retry fonctionne correctement : la tâche se lance une deuxième fois et seuls les fichiers non traités avec succès lors des tentatives précédentes sont relancés.
+
+## Installation de Tesseract (OCR)
+
+Afin de faire fonctionner `pytesseract` pour l'OCR, il est nécessaire d'installer Tesseract :
+
+```bash
+sudo apt install tesseract-ocr
+sudo apt install libtesseract-dev
+```
