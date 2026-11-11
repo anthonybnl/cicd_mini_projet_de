@@ -12,8 +12,6 @@ Les données générées aléatoirement mais avec une **seed fixe** (`SEED = 202
 
 ## Simulation d'un bug dans la génération des données
 
-[Lien vers la pipeline](TODO)
-
 Afin de pouvoir vérifier le bon fonctionnement des tests, nous pouvons simuler un bug via la variable d'environnement `SIMULER_BUG=generation`  
 Lorsque cette variable est définie avec cette valeur, des changements interviennent dans les données générées.
 
@@ -25,7 +23,9 @@ Afin de déclencher ce comportement il faut lancer la pipeline manuellement et c
 
 Résultat :
 
-[Lien vers la pipeline](TODO)
+[Lien vers la pipeline](https://github.com/anthonybnl/cicd_mini_projet_de/actions/runs/42994084459)
+
+![](img/01.png)
 
 ## Ajout du retry sur le traitement des données
 
