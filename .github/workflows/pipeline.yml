@@ -1,6 +1,16 @@
 name: pipeline
 on:
   push:
+  # lancement manuel depuis l'onglet Actions, pour simuler un bug (voir README)
+  workflow_dispatch:
+    inputs:
+      simuler_bug:
+        description: "Bug à simuler"
+        type: choice
+        options:
+          - aucun
+          - generation
+        default: aucun
 jobs:
   run_and_test:
     runs-on: ubuntu-latest
@@ -29,3 +39,5 @@ jobs:
         run: pytest -vv
     env:
       DATABASE_URL: "postgresql+psycopg2://postgres:postgres@localhost/mini_projet_de"
+      # vide lors d'un push : aucun bug simulé
+      SIMULER_BUG: ${{ inputs.simuler_bug }}

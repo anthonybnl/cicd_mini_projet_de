@@ -1,4 +1,5 @@
 import csv
+import os
 import random
 from datetime import datetime, timedelta
 from pathlib import Path
@@ -8,6 +9,9 @@ import boto3
 # On fixe la seed (du random) afin que le process soit reproductible (les tests passeront donc puisque les données seront toujours les mêmes)
 SEED = 2026
 NB_FICHIERS = 3
+
+# permet de simuler un bug pour faire échouer la pipeline (voir README)
+SIMULER_BUG = os.environ.get("SIMULER_BUG", "")
 
 COMPTES = {
     "FR7630006000011234567890189": ("France", "Société Générale"),
@@ -95,6 +99,12 @@ def main():
 
     for i in range(1, NB_FICHIERS + 1):
         data = generer_fichier()
+
+        if SIMULER_BUG == "generation" and i == 2:
+            # bug simulé sur le deuxième fichier
+            print(f"==== SIMULER_BUG=generation : le fichier 2 sera en erreur ====")
+            data[0]["montant"] = round(data[0]["montant"] * 100, 2) # montant en centimes pour simuler le bug
+
         filepath = Path(f"transactions_{i:02d}.csv").resolve()
         envoyer_fichier_dans_bucket(s3, bucket, filepath, data)
         print(f"{filepath.name} : {len(data)} transactions envoyées")

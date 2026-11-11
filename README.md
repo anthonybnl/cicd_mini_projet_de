@@ -10,23 +10,26 @@ Le script `src/generation_data.py` génère 3 fichiers CSV de 5 à 10 transactio
 
 Les données générées aléatoirement mais avec une **seed fixe** (`SEED = 2026`) : elles sont donc identiques à chaque exécution ce qui rend le pipeline testable (`pytest`)
 
-## Simulation d'une erreur de calcul
+## Simulation d'un bug dans la génération des données
 
-[Lien vers la pipeline](https://github.com/anthonybnl/cicd_mini_projet_de/actions/runs/39763114617)
+[Lien vers la pipeline](TODO)
 
-Afin de tester la robustesse de notre pipeline CI/CD, notamment des tests, nous avons volontairement changer une règle de calcul (moyenne au lieu de somme)
+Afin de pouvoir vérifier le bon fonctionnement des tests, nous pouvons simuler un bug via la variable d'environnement `SIMULER_BUG=generation`  
+Lorsque cette variable est définie avec cette valeur, des changements interviennent dans les données générées.
+
+Ainsi les tests ne passent plus.
+
+Sur un `push` classique, la variable est vide et aucun bug n'est simulé.
+
+Afin de déclencher ce comportement il faut lancer la pipeline manuellement et choisir l'option `generation` pour le choix `Bug à simuler`
 
 Résultat :
 
-![](doc/01.png)
-
-Comme on peut le voir, les tests ont échoué car la règle de calcul a été modifiée.
+[Lien vers la pipeline](TODO)
 
 ## Ajout du retry sur le traitement des données
 
-[Lien vers la pipeline](https://github.com/anthonybnl/cicd_mini_projet_de/actions/runs/39779392118)
-
-Le script de traitement liste les fichiers CSV présents dans le bucket et les traite **un par un**.
+TODO
 
 ### Mémoire des fichiers traités
 
