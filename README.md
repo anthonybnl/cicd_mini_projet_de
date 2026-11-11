@@ -25,11 +25,9 @@ Résultat :
 
 [Lien vers la pipeline](https://github.com/anthonybnl/cicd_mini_projet_de/actions/runs/42994084459)
 
-![](img/01.png)
+![](doc/img/01.png)
 
 ## Ajout du retry sur le traitement des données
-
-TODO
 
 ### Mémoire des fichiers traités
 
@@ -62,9 +60,9 @@ Afin de déclencher ce comportement il faut lancer la pipeline manuellement et c
 
 Résultat :
 
-[Lien vers la pipeline](TODO)
+[Lien vers la pipeline](https://github.com/anthonybnl/cicd_mini_projet_de/actions/runs/42999708761)
 
-![](img/02.png)
+![](doc/img/02.png)
 
 ## Installation de Tesseract (OCR)
 
