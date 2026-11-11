@@ -14,6 +14,12 @@ on:
         default: aucun
 jobs:
   run_and_test:
+    # la pipeline tourne deux fois en parallèle : sans OCR (0) et avec OCR (1)
+    strategy:
+      fail-fast: false
+      matrix:
+        with_ocr: ["0", "1"]
+    name: run_and_test (WITH_OCR=${{ matrix.with_ocr }})
     runs-on: ubuntu-latest
     steps:
       - name: Check out repository code
@@ -24,6 +30,11 @@ jobs:
           python-version: 3.12
       - name: install requirements
         run: python -m pip install -r requirements.txt
+      - name: Installation de Tesseract (OCR)
+        if: matrix.with_ocr == '1'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends tesseract-ocr tesseract-ocr-fra
       - name: Setup de la base de donnée et du conteneur S3
         run: docker compose up -d
       - name: On attend que les services soient UP
@@ -42,3 +53,4 @@ jobs:
       DATABASE_URL: "postgresql+psycopg2://postgres:postgres@localhost/mini_projet_de"
       # vide lors d'un push : aucun bug simulé
       SIMULER_BUG: ${{ inputs.simuler_bug }}
+      WITH_OCR: ${{ matrix.with_ocr }}

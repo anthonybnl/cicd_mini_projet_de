@@ -8,7 +8,6 @@ from sqlalchemy import create_engine, text
 
 load_dotenv()
 
-
 MontantParIban = namedtuple("MontantParIban", ["iban", "montant"])
 MontantParBanque = namedtuple("MontantParBanque", ["banque", "montant"])
 MontantParIbanDestination = namedtuple("MontantParIbanDestination", ["iban", "montant"])
@@ -25,6 +24,7 @@ TransactionMontantEleve = namedtuple(
     ],
 )
 
+
 @pytest.fixture
 def get_data_from_bdd():
     print("Connecting to the database...")
@@ -32,7 +32,9 @@ def get_data_from_bdd():
 
     with engine.connect() as connection:
         # partie montant par IBAN
-        result = connection.execute(text("SELECT iban, montant FROM montants_par_iban ORDER BY iban"))
+        result = connection.execute(
+            text("SELECT iban, montant FROM montants_par_iban ORDER BY iban")
+        )
         montants_par_iban = [
             MontantParIban(iban=iban, montant=float(montant))
             for iban, montant in result.fetchall()
@@ -49,7 +51,9 @@ def get_data_from_bdd():
 
         # partie montant par IBAN de destination
         result = connection.execute(
-            text("SELECT iban, montant FROM montants_par_iban_destination ORDER BY iban")
+            text(
+                "SELECT iban, montant FROM montants_par_iban_destination ORDER BY iban"
+            )
         )
         montants_par_iban_destination = [
             MontantParIbanDestination(iban=iban, montant=float(montant))
@@ -67,7 +71,7 @@ def get_data_from_bdd():
         transactions_montant_eleve = []
         for row in result.fetchall():
             data = [*row]
-            data[-1] = float(data[-1]) # avant dernier : montant, on met en float
+            data[-1] = float(data[-1])  # avant dernier : montant, on met en float
             transactions_montant_eleve.append(TransactionMontantEleve(*data))
 
     return (
@@ -82,6 +86,15 @@ def get_data_from_bdd():
 def data_expected():
     # valeurs attendues pour les données générées avec SEED = 2026 (voir generation_data.py)
     # ces données sont triées par IBAN, banque et datetime_tx pour que cela corresponde aux données de la BDD
+
+    # gestion du mode OCR
+
+    WITH_OCR = os.environ.get("WITH_OCR", "0") == "1"
+    if WITH_OCR:
+        print("Bonus OCR : les images sont comptées dans les tests")
+
+    # données attendues
+
     montants_par_iban = [
         MontantParIban(iban="DE89370400440532013000", montant=1213.29),
         MontantParIban(iban="ES9121000418450200051332", montant=11132.69),
@@ -91,6 +104,14 @@ def data_expected():
         MontantParIban(iban="GB29NWBK60161331926819", montant=2995.95),
     ]
 
+    if WITH_OCR:
+        montants_par_iban[2] = MontantParIban(
+            iban="FR7613306000015678901234567", montant=10665.42
+        )
+        montants_par_iban[1] = MontantParIban(
+            iban="ES9121000418450200051332", montant=16811.59
+        )
+
     montants_par_banque = [
         MontantParBanque(banque="CaixaBank", montant=11132.69),
         MontantParBanque(banque="Crédit agricole", montant=10349.75),
@@ -99,6 +120,12 @@ def data_expected():
         MontantParBanque(banque="Société Générale", montant=7802.67),
     ]
 
+    if WITH_OCR:
+        montants_par_banque[1] = MontantParBanque(
+            banque="Crédit agricole", montant=10665.42
+        )
+        montants_par_banque[0] = MontantParBanque(banque="CaixaBank", montant=16811.59)
+
     montants_par_iban_destination = [
         MontantParIbanDestination(iban="DE89370400440532013000", montant=9520.14),
         MontantParIbanDestination(iban="ES9121000418450200051332", montant=2656.46),
@@ -106,6 +133,14 @@ def data_expected():
         MontantParIbanDestination(iban="FR7630006000011234567890189", montant=1197.44),
         MontantParIbanDestination(iban="GB29NWBK60161331926819", montant=18411.7),
     ]
+
+    if WITH_OCR:
+        montants_par_iban_destination[4] = MontantParIbanDestination(
+            iban="GB29NWBK60161331926819", montant=18727.37
+        )
+        montants_par_iban_destination[2] = MontantParIbanDestination(
+            iban="FR7613306000015678901234567", montant=7387.51
+        )
 
     transactions_montant_eleve = [
         TransactionMontantEleve(
@@ -137,6 +172,20 @@ def data_expected():
         ),
     ]
 
+    if WITH_OCR:
+        transactions_montant_eleve.insert(
+            0,
+            TransactionMontantEleve(
+                datetime_tx=datetime.datetime(2026, 3, 29, 8, 31),
+                iban_source="ES9121000418450200051332",
+                pays_source="Spain",
+                banque="CaixaBank",
+                iban_destination="FR7613306000015678901234567",
+                pays_destination="France",
+                montant=5678.9,
+            ),
+        )
+
     return (
         montants_par_iban,
         montants_par_banque,
@@ -150,15 +199,18 @@ def test_montants_par_iban_equals(get_data_from_bdd, data_expected):
     expected_montants_par_iban = data_expected[0]
     assert montants_par_iban == expected_montants_par_iban
 
+
 def test_montants_par_banque_equals(get_data_from_bdd, data_expected):
     montants_par_banque = get_data_from_bdd[1]
     expected_montants_par_banque = data_expected[1]
     assert montants_par_banque == expected_montants_par_banque
 
+
 def test_montants_par_iban_destination_equals(get_data_from_bdd, data_expected):
     montants_par_iban_destination = get_data_from_bdd[2]
     expected_montants_par_iban_destination = data_expected[2]
     assert montants_par_iban_destination == expected_montants_par_iban_destination
+
 
 def test_transactions_montant_eleve_equals(get_data_from_bdd, data_expected):
     transactions_montant_eleve = get_data_from_bdd[3]

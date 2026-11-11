@@ -3,9 +3,12 @@ import os
 import re
 import sys
 import time
+from datetime import datetime
 from pathlib import Path
 
 import boto3
+import pytesseract
+from PIL import Image
 from sqlalchemy import text
 
 from db import get_database_engine
@@ -16,6 +19,23 @@ SIMULER_BUG = os.environ.get("SIMULER_BUG", "")
 # fichier pour la gestion du bug : s'il existe, le bug d'insertion a déjà été simulé lors d'un lancement précédent
 MARQUEUR_BUG_INSERTION = Path(__file__).resolve().parents[1] / "bug_insertion"
 
+# endpoint du S3 : localhost par défaut, "http://s3:9001" depuis le conteneur Docker
+S3_ENDPOINT_URL = os.environ.get("S3_ENDPOINT_URL", "http://localhost:9001")
+
+# WITH_OCR=1 : bonus OCR
+WITH_OCR = os.environ.get("WITH_OCR", "0") == "1"
+
+# colonnes attendues dans les fichiers CSV et les images OCR
+COLONNES = [
+    "datetime",
+    "iban_source",
+    "pays_source",
+    "banque",
+    "iban_destination",
+    "pays_destination",
+    "montant",
+]
+
 
 def extraire_data(file_path) -> list[dict]:
     data = []
@@ -24,6 +44,62 @@ def extraire_data(file_path) -> list[dict]:
         reader = csv.DictReader(csvfile)
         data = list(reader)
     return data
+
+
+def extraire_texte_image(file_path) -> str:
+    # lang="fra" : modèle français, pour lire les accents (Société Générale, Crédit agricole)
+    # --psm 6 : tesseract considère l'image comme un bloc de texte uniforme
+    image = Image.open(file_path)
+    print(f"Lecture OCR de l'image : {image.format} {image.size} {image.mode}")
+    str = pytesseract.image_to_string(image, lang="fra", config="--psm 6")
+    print(f"===== Texte OCR extrait =====\n{str}")
+    return str
+
+
+def parser_texte_ocr(texte: str) -> list[dict]:
+    # une image = une transaction, avec une ligne "clé: valeur" par colonne
+    transaction = {}
+    for ligne in texte.splitlines():
+        match = re.match(r"\s*(\w+\s*\w+)\s*:\s*(.+)", ligne)
+        if match:
+            cle, valeur = match.groups()
+
+            # l'OCR a tendance à rajouter des espaces
+            cle = cle.replace(" ", "").strip()
+            if cle in COLONNES:
+                transaction[cle] = valeur.strip()
+
+    for colonne in COLONNES:
+        if colonne not in transaction:
+            raise ValueError(f"Champ manquant dans le texte OCR : {colonne}")
+
+    # l'OCR peut ajouter des espaces dans les dates, les nombres et les IBAN
+    transaction["datetime"] = transaction["datetime"].replace(" ", "")
+    datetime.fromisoformat(
+        transaction["datetime"]
+    )  # lève une ValueError si la date est mal lue
+
+    for colonne in ["iban_source", "iban_destination"]:
+        transaction[colonne] = transaction[colonne].replace(" ", "")
+
+    montant = transaction["montant"].replace(" ", "").replace(",", ".")
+    float(montant)  # lève une ValueError si le montant est illisible
+    transaction["montant"] = montant
+
+    return [transaction]
+
+
+def extraire_data_image(file_path) -> list[dict]:
+    texte = extraire_texte_image(file_path)
+    print(f"Texte lu par l'OCR :\n{texte}")
+    return parser_texte_ocr(texte)
+
+
+def charger_fichier(file_path: Path) -> list[dict]:
+    # les images passent par l'OCR, les CSV sont lus directement
+    if file_path.suffix.lower() == ".png":
+        return extraire_data_image(file_path)
+    return extraire_data(file_path)
 
 
 def _mon_group_by(data: list[dict], key: str) -> dict:
@@ -163,7 +239,9 @@ def inserer_data(engine, nom_fichier: str, resultats, simuler_bug=False):
     with engine.begin() as conn:
         inserer_montants_par_iban(conn, results_montants_par_iban)
         inserer_montants_par_banque(conn, results_montants_par_banque)
-        inserer_montants_par_iban_destination(conn, results_montants_par_iban_destination)
+        inserer_montants_par_iban_destination(
+            conn, results_montants_par_iban_destination
+        )
         inserer_transactions_cinq_mille(conn, transactions_cinq_mille)
 
         if simuler_bug and nom_fichier.endswith("transactions_02.csv"):
@@ -189,9 +267,11 @@ def lister_fichiers_s3(s3, bucket: str) -> list[str]:
 
 
 def telecharger_un_fichier_s3(s3, bucket: str, key: str) -> Path:
-    match = re.match(r"data/([a-zA-Z0-9_]+\.csv)", key)
+    match = re.match(r"data/([a-zA-Z0-9_]+\.(csv|png))$", key)
     if not match:
-        raise ValueError(f"Le key '{key}' ne correspond pas au pattern attendu 'data/<fichier>.csv'")
+        raise ValueError(
+            f"Le key '{key}' ne correspond pas au pattern attendu 'data/<fichier>.csv' ou 'data/<fichier>.png'"
+        )
 
     local_file = Path(match.group(1))
     print(f"Téléchargement du fichier {key} vers {local_file} ...")
@@ -200,15 +280,17 @@ def telecharger_un_fichier_s3(s3, bucket: str, key: str) -> Path:
 
 
 def traiter_un_fichier(s3, bucket: str, engine, key_s3: str, simuler_bug=False):
-    fichier_csv = telecharger_un_fichier_s3(s3, bucket, key_s3)
+    fichier_local = telecharger_un_fichier_s3(s3, bucket, key_s3)
     try:
-        data = extraire_data(fichier_csv)
+        data = charger_fichier(fichier_local)
         resultats = traiter_data(data)
     finally:
         # suppression du fichier local, même en cas d'erreur
-        fichier_csv.unlink()
+        fichier_local.unlink()
 
-    print(f"{len(data)} transactions, dont {len(resultats[3])} >= 5000. Insertion en base ...")
+    print(
+        f"{len(data)} transactions, dont {len(resultats[3])} >= 5000. Insertion en base ..."
+    )
     avec_retry(inserer_data, engine, key_s3, resultats, simuler_bug)
 
 
@@ -217,7 +299,7 @@ def main():
     # client boto3
     s3 = boto3.client(
         "s3",
-        endpoint_url="http://localhost:9001",
+        endpoint_url=S3_ENDPOINT_URL,
         aws_access_key_id="rustfs",
         aws_secret_access_key="rustfs",
     )
@@ -244,6 +326,9 @@ def main():
     fichiers_en_erreur = []
 
     for key_s3 in liste_fichiers_s3:
+        if (not WITH_OCR) and key_s3.endswith(".png"):
+            print(f"Fichier image {key_s3} dans le bucket mais le mode OCR n'est pas activé. Ignoré.")
+            continue
 
         if key_s3 in fichiers_traites:
             print(f"Le fichier {key_s3} a déjà été traité. Passage au suivant.")
@@ -255,12 +340,16 @@ def main():
             print(f"Fichier {key_s3} traité avec succès.")
         except Exception as e:  # noqa: BLE001
             # on passe au fichier suivant : un fichier en erreur ne bloque pas les autres
-            print(f"Erreur lors du traitement du fichier {key_s3} : {type(e).__name__} {e}")
+            print(
+                f"Erreur lors du traitement du fichier {key_s3} : {type(e).__name__} {e}"
+            )
             fichiers_en_erreur.append(key_s3)
 
     if fichiers_en_erreur:
         print(f"\nFichiers en erreur : {fichiers_en_erreur}")
-        print("Ils seront retraités au prochain lancement (les autres ne seront pas rejoués).")
+        print(
+            "Ils seront retraités au prochain lancement (les autres ne seront pas rejoués)."
+        )
         sys.exit(1)
 
     print("\nTous les fichiers ont été traités avec succès.")

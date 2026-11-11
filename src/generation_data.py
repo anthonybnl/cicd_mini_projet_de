@@ -13,6 +13,14 @@ NB_FICHIERS = 3
 # permet de simuler un bug pour faire échouer la pipeline (voir README)
 SIMULER_BUG = os.environ.get("SIMULER_BUG", "")
 
+# WITH_OCR=1 : bonus OCR
+WITH_OCR = os.environ.get("WITH_OCR", "0") == "1"
+
+DOSSIER_IMAGES = Path(__file__).resolve().parents[1] / "images"
+
+# endpoint du S3 : localhost par défaut, "http://s3:9001" depuis le conteneur Docker
+S3_ENDPOINT_URL = os.environ.get("S3_ENDPOINT_URL", "http://localhost:9001")
+
 COMPTES = {
     "FR7630006000011234567890189": ("France", "Société Générale"),
     "FR7630003000409876543210925": ("France", "Société Générale"),
@@ -43,7 +51,9 @@ def generer_transaction() -> dict:
     referentiel_iban = list(COMPTES.keys())
 
     iban_source = random.choice(referentiel_iban)
-    iban_destination = random.choice([iban for iban in referentiel_iban if iban != iban_source])
+    iban_destination = random.choice(
+        [iban for iban in referentiel_iban if iban != iban_source]
+    )
 
     pays_source, banque = COMPTES[iban_source]
     pays_destination, _ = COMPTES[iban_destination]
@@ -77,7 +87,16 @@ def envoyer_fichier_dans_bucket(s3, bucket, filepath: Path, data):
     s3.upload_file(str(filepath), bucket, f"data/{filepath.name}")
 
     # suppression du fichier CSV local
-    filepath.unlink()
+    # filepath.unlink()
+
+
+def envoyer_images_dans_bucket(s3, bucket):
+    # le nombre d'images n'est pas fixé : on envoie toutes les images du dossier
+    images = sorted(DOSSIER_IMAGES.glob("*.png"))
+    for image in images:
+        s3.upload_file(str(image), bucket, f"data/{image.name}")
+        print(f"{image.name} : image envoyée")
+    print(f"{len(images)} image(s) envoyée(s) pour l'OCR.")
 
 
 def main():
@@ -86,7 +105,7 @@ def main():
     # client boto3
     s3 = boto3.client(
         "s3",
-        endpoint_url="http://localhost:9001",
+        endpoint_url=S3_ENDPOINT_URL,
         aws_access_key_id="rustfs",
         aws_secret_access_key="rustfs",
     )
@@ -102,12 +121,17 @@ def main():
 
         if SIMULER_BUG == "generation" and i == 2:
             # bug simulé sur le deuxième fichier
-            print(f"==== SIMULER_BUG=generation : le fichier 2 sera en erreur ====")
-            data[0]["montant"] = round(data[0]["montant"] * 100, 2) # montant en centimes pour simuler le bug
+            print("==== SIMULER_BUG=generation : le fichier 2 sera en erreur ====")
+            data[0]["montant"] = round(
+                data[0]["montant"] * 100, 2
+            )  # montant en centimes pour simuler le bug
 
         filepath = Path(f"transactions_{i:02d}.csv").resolve()
         envoyer_fichier_dans_bucket(s3, bucket, filepath, data)
         print(f"{filepath.name} : {len(data)} transactions envoyées")
+
+    if WITH_OCR:
+        envoyer_images_dans_bucket(s3, bucket)
 
     print("Fichiers envoyés dans le bucket avec succès.")
 

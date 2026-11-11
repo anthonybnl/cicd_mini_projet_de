@@ -25,3 +25,15 @@ services:
     container_name: adminer
     ports:
       - "8081:8080"
+
+  # lance l'ETL avec l'OCR (afin de tester dans un environnement linux)
+  pipeline:
+    build: .
+    profiles: ["pipeline"]
+    depends_on:
+      - bdd
+      - s3
+    environment:
+      DATABASE_URL: "postgresql+psycopg2://postgres:postgres@bdd/mini_projet_de"
+      S3_ENDPOINT_URL: "http://s3:9001"
+      WITH_OCR: "1"
