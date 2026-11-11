@@ -1,4 +1,5 @@
 import csv
+import os
 import re
 import sys
 import time
@@ -8,6 +9,12 @@ import boto3
 from sqlalchemy import text
 
 from db import get_database_engine
+
+# permet de simuler un bug d'insertion pour tester le retry
+SIMULER_BUG = os.environ.get("SIMULER_BUG", "")
+
+# fichier pour la gestion du bug : s'il existe, le bug d'insertion a déjà été simulé lors d'un lancement précédent
+MARQUEUR_BUG_INSERTION = Path(__file__).resolve().parents[1] / "bug_insertion"
 
 
 def extraire_data(file_path) -> list[dict]:
@@ -143,7 +150,7 @@ def marquer_fichier_traite(conn, nom_fichier: str):
     )
 
 
-def inserer_data(engine, nom_fichier: str, resultats):
+def inserer_data(engine, nom_fichier: str, resultats, simuler_bug=False):
     (
         results_montants_par_iban,
         results_montants_par_banque,
@@ -158,6 +165,11 @@ def inserer_data(engine, nom_fichier: str, resultats):
         inserer_montants_par_banque(conn, results_montants_par_banque)
         inserer_montants_par_iban_destination(conn, results_montants_par_iban_destination)
         inserer_transactions_cinq_mille(conn, transactions_cinq_mille)
+
+        if simuler_bug and nom_fichier.endswith("transactions_02.csv"):
+            # bug simulé : rollback des insertions
+            raise RuntimeError("bug d'insertion simulé")
+
         marquer_fichier_traite(conn, nom_fichier)
 
 
@@ -187,7 +199,7 @@ def telecharger_un_fichier_s3(s3, bucket: str, key: str) -> Path:
     return local_file
 
 
-def traiter_un_fichier(s3, bucket: str, engine, key_s3: str):
+def traiter_un_fichier(s3, bucket: str, engine, key_s3: str, simuler_bug=False):
     fichier_csv = telecharger_un_fichier_s3(s3, bucket, key_s3)
     try:
         data = extraire_data(fichier_csv)
@@ -197,7 +209,7 @@ def traiter_un_fichier(s3, bucket: str, engine, key_s3: str):
         fichier_csv.unlink()
 
     print(f"{len(data)} transactions, dont {len(resultats[3])} >= 5000. Insertion en base ...")
-    avec_retry(inserer_data, engine, key_s3, resultats)
+    avec_retry(inserer_data, engine, key_s3, resultats, simuler_bug)
 
 
 def main():
@@ -221,6 +233,14 @@ def main():
     engine = get_database_engine()
     fichiers_traites = avec_retry(lire_fichiers_traites, engine)
 
+    # simulation du bug d'insertion : seulement au premier lancement,
+    # pour que le retry de la pipeline puisse réussir au deuxième
+    simuler_bug = False
+    if SIMULER_BUG == "insertion" and not MARQUEUR_BUG_INSERTION.exists():
+        print("==== SIMULER_BUG=insertion : l'insertion du fichier 2 va échouer ====")
+        MARQUEUR_BUG_INSERTION.touch()
+        simuler_bug = True
+
     fichiers_en_erreur = []
 
     for key_s3 in liste_fichiers_s3:
@@ -231,7 +251,7 @@ def main():
 
         print(f"\nTraitement du fichier : {key_s3} ...")
         try:
-            traiter_un_fichier(s3, bucket, engine, key_s3)
+            traiter_un_fichier(s3, bucket, engine, key_s3, simuler_bug)
             print(f"Fichier {key_s3} traité avec succès.")
         except Exception as e:  # noqa: BLE001
             # on passe au fichier suivant : un fichier en erreur ne bloque pas les autres
@@ -244,6 +264,9 @@ def main():
         sys.exit(1)
 
     print("\nTous les fichiers ont été traités avec succès.")
+
+    # tout est OK : on supprime le fichier pour pouvoir rejouer le scénario du bug
+    MARQUEUR_BUG_INSERTION.unlink(missing_ok=True)
 
 
 if __name__ == "__main__":

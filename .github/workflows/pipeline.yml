@@ -10,6 +10,7 @@ on:
         options:
           - aucun
           - generation
+          - insertion
         default: aucun
 jobs:
   run_and_test:

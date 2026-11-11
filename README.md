@@ -45,6 +45,27 @@ Les montants s'additionnent à ceux déjà en base, c'est l'agrégation incréme
 1. **Dans le script** : le téléchargement depuis le S3 et l'insertion en base sont retentés 3 fois (5 secondes d'attente), pour les erreurs passagères (S3 ou BDD indisponible un court instant)
 2. **Dans la pipeline** : si un fichier est toujours en erreur, le script se termine avec un code d'erreur et la pipeline le relance. Grâce à la table `fichiers_traites`, seuls les fichiers en erreur sont rejoués.
 
+### Simulation d'un bug d'insertion
+
+Pour tester ce mécanisme, nous pouvons simuler un bug d'insertion via la variable d'environnement `SIMULER_BUG=insertion`.  
+L'insertion du fichier 2 échoue alors au milieu de la transaction (après l'insertion des montants, avant le marquage du fichier) : tout est annulé par le rollback.
+
+Le bug n'est simulé qu'au **premier lancement** du script : un fichier `bug_insertion` est créé à la racine du projet. Au lancement suivant, le fichier existe déjà et le bug n'est plus simulé. Le fichier est supprimé quand tous les fichiers sont traités avec succès.
+
+Déroulement attendu :
+
+1. **Premier lancement** : le fichier 1 est traité, le fichier 2 échoue 3 fois (retry dans le script), le fichier 3 est traité. Le script se termine en erreur.
+2. **Retry de la pipeline** : les fichiers 1 et 3 sont ignorés (déjà traités), le fichier 2 est traité avec succès.
+3. **Tests** : ils passent, aucun montant n'a été compté deux fois.
+
+Afin de déclencher ce comportement il faut lancer la pipeline manuellement et choisir l'option `insertion` pour le choix `Bug à simuler`
+
+Résultat :
+
+[Lien vers la pipeline](TODO)
+
+![](img/02.png)
+
 ## Installation de Tesseract (OCR)
 
 Afin de faire fonctionner `pytesseract` pour l'OCR, il est nécessaire d'installer Tesseract :
