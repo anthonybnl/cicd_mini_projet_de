@@ -1,0 +1,20 @@
+# image d'environnement pour la pipeline avec OCR : Python + Tesseract + dépendances
+# le code n'est pas copié dans l'image
+# image publiée sur ghcr.io et utilisée par la CI
+
+FROM python:3.12.16-slim-trixie
+WORKDIR /app
+
+# paquets Debian nécessaires pour l'OCR (tesseract)
+RUN apt-get update \
+    && apt-get install -y --no-install-recommends tesseract-ocr tesseract-ocr-fra
+
+# requirements Python
+COPY requirements.txt .
+RUN pip install --no-cache-dir -r requirements.txt
+
+# variables d'environnement par défaut (utf-8 et OCR activé)
+ENV PYTHONIOENCODING=utf-8
+ENV WITH_OCR=1
+
+CMD ["sh", "-c", "python src/generation_data.py && python src/traiter_data.py && pytest -vv"]

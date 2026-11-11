@@ -64,11 +64,47 @@ Résultat :
 
 ![](doc/img/02.png)
 
-## Installation de Tesseract (OCR)
+## Bonus OCR : transactions contenues dans des images
 
-Afin de faire fonctionner `pytesseract` pour l'OCR, il est nécessaire d'installer Tesseract :
+En plus des CSV, la pipeline peut lire des transactions dans des images grâce à un OCR (Tesseract, via `pytesseract`).
+
+### Fonctionnement
+
+Les images sont dans le dossier `images/` (une transaction par image, une ligne `clé: valeur` par colonne).  
+Elles sont faites à la main et versionnées, afin de pouvoir tester la pipeline (reproductibilité)
+
+Quand la variable d'environnement `WITH_OCR=1` est définie :
+
+1. `generation_data.py` envoie toutes les images `.png` du dossier dans le bucket S3, à côté des CSV
+2. `traiter_data.py` lit les images avec l'OCR, puis le texte obtenu est transformé en transactions, avec les mêmes colonnes que le CSV. Le reste du traitement est identique.
+
+Si l'OCR lit mal une valeur (IBAN tronqué, montant ou date illisible), le fichier part en erreur sans bloquer les autres, comme pour un CSV.
+
+### Dans la CI
+
+Le workflow contient deux jobs séparés, lancés en parallèle :
+
+- `run_and_test` : la pipeline sans OCR (CSV uniquement)
+- `run_and_test_ocr` : la pipeline avec OCR (CSV + images)
+
+L'installation de Tesseract dans le pipeline était complexe et le job échouait.  
+Une solution a été trouvée : apsser par une **image docker pré construite** (`Dockerfile.cicd`), publiée sur le repo GitHub (`ghcr.io/anthonybnl/cicd_mini_projet_de-ocr`).  
+Elle contient Python, Tesseract (avec le modèle français `tesseract-ocr-fra`, pour les accents) et les dépendances Python.
+
+Le job OCR fait simplement des `docker run` de cette image pour lancer les deux scripts python et les tests.
+Le code n'est **pas inclu** dans l'image : il est monté depuis le checkout (`-v`), donc c'est toujours le code du commit qui est testé.  
+L'image n'est à reconstruire que si le `Dockerfile.cicd` ou le `requirements.txt` change.
+
+### Résultat
+
+[Lien vers le pipeline](https://github.com/anthonybnl/cicd_mini_projet_de/actions/runs/43047949855/job/130616872203)
+
+![](doc/img/03.png)
+
+### Construire et publier l'image de la CI
 
 ```bash
-sudo apt install tesseract-ocr
-sudo apt install libtesseract-dev
+docker login ghcr.io -u <username>
+docker build -f Dockerfile.cicd -t ghcr.io/<username>/<image>:<tag> .
+docker push ghcr.io/<username>/<image>:<tag>
 ```

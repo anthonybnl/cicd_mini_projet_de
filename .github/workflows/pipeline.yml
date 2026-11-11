@@ -12,14 +12,13 @@ on:
           - generation
           - insertion
         default: aucun
+env:
+  DATABASE_URL: "postgresql+psycopg2://postgres:postgres@localhost/mini_projet_de"
+  # vide lors d'un push : aucun bug simulé
+  SIMULER_BUG: ${{ inputs.simuler_bug }}
 jobs:
+  # pipeline sans OCR : CSV uniquement
   run_and_test:
-    # la pipeline tourne deux fois en parallèle : sans OCR (0) et avec OCR (1)
-    strategy:
-      fail-fast: false
-      matrix:
-        with_ocr: ["0", "1"]
-    name: run_and_test (WITH_OCR=${{ matrix.with_ocr }})
     runs-on: ubuntu-latest
     steps:
       - name: Check out repository code
@@ -30,11 +29,6 @@ jobs:
           python-version: 3.12
       - name: install requirements
         run: python -m pip install -r requirements.txt
-      - name: Installation de Tesseract (OCR)
-        if: matrix.with_ocr == '1'
-        run: |
-          sudo apt-get update
-          sudo apt-get install -y --no-install-recommends tesseract-ocr tesseract-ocr-fra
       - name: Setup de la base de donnée et du conteneur S3
         run: docker compose up -d
       - name: On attend que les services soient UP
@@ -49,8 +43,30 @@ jobs:
           command: python src/traiter_data.py
       - name: Tests (test des données en BDD)
         run: pytest -vv
+
+  # pipeline avec OCR : CSV + images
+  # les scripts tournent dans l'image ghcr.io qui contient Python + Tesseract (voir Dockerfile.cicd)
+  # le code n'est pas dans l'image
+  run_and_test_ocr:
+    runs-on: ubuntu-latest
     env:
-      DATABASE_URL: "postgresql+psycopg2://postgres:postgres@localhost/mini_projet_de"
-      # vide lors d'un push : aucun bug simulé
-      SIMULER_BUG: ${{ inputs.simuler_bug }}
-      WITH_OCR: ${{ matrix.with_ocr }}
+      IMAGE_OCR: ghcr.io/anthonybnl/cicd_mini_projet_de-ocr:latest
+    steps:
+      - name: Check out repository code
+        uses: actions/checkout@v6
+      - name: Récupération de l'image avec Tesseract
+        run: docker pull $IMAGE_OCR
+      - name: Setup de la base de donnée et du conteneur S3
+        run: docker compose up -d
+      - name: On attend que les services soient UP
+        run: sleep 5
+      - name: Génération des CSV + envoi des images
+        run: docker run --rm --network host -v "$PWD":/app -e SIMULER_BUG $IMAGE_OCR python src/generation_data.py
+      - name: Lancer le traitement des données (avec OCR)
+        uses: nick-fields/retry@v3
+        with:
+          timeout_seconds: 60
+          max_attempts: 2
+          command: docker run --rm --network host -v "$PWD":/app -e DATABASE_URL -e SIMULER_BUG $IMAGE_OCR python src/traiter_data.py
+      - name: Tests (test des données en BDD)
+        run: docker run --rm --network host -v "$PWD":/app -e DATABASE_URL $IMAGE_OCR pytest -vv
